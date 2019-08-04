@@ -15,7 +15,6 @@
 #include "Player.h"
 #include "Vehicle.h"
 #include "ObjectMgr.h"
-#include "GameTime.h"
 #include "UpdateData.h"
 #include "UpdateMask.h"
 #include "Util.h"
@@ -941,7 +940,7 @@ void MovementInfo::OutDebug()
     sLog->outString("guid " UI64FMTD, guid);
     sLog->outString("flags %u", flags);
     sLog->outString("flags2 %u", flags2);
-    sLog->outString("time %u current time " UI64FMTD "", flags2, uint64(::GameTime::GetGameTime()));
+    sLog->outString("time %u current time " UI64FMTD "", flags2, uint64(::time(NULL)));
     sLog->outString("position: `%s`", pos.ToString().c_str());
     if (flags & MOVEMENTFLAG_ONTRANSPORT)
     {
@@ -965,11 +964,11 @@ void MovementInfo::OutDebug()
         sLog->outString("splineElevation: %f", splineElevation);
 }
 
-WorldObject::WorldObject(bool isWorldObject) : WorldLocation(), LastUsedScriptID(0),
+WorldObject::WorldObject(bool isWorldObject) : WorldLocation(),
 #ifdef ELUNA
 elunaEvents(NULL),
 #endif
-m_name(""), m_isActive(false), m_isWorldObject(isWorldObject), m_zoneScript(NULL),
+LastUsedScriptID(0), m_name(""), m_isActive(false), m_isVisibilityDistanceOverride(false), m_isWorldObject(isWorldObject), m_zoneScript(NULL),
 m_transport(NULL), m_currMap(NULL), m_InstanceId(0),
 m_phaseMask(PHASEMASK_NORMAL), m_notifyflags(0), m_executed_notifies(0)
 {
@@ -1038,6 +1037,14 @@ void WorldObject::setActive(bool on)
         else if (GetTypeId() == TYPEID_GAMEOBJECT)
             map->RemoveFromActive((GameObject*)this);
     }
+}
+
+void WorldObject::SetVisibilityDistanceOverride(bool isVisibilityDistanceOverride)
+{
+    if (GetTypeId() == TYPEID_PLAYER)
+        return;
+
+    m_isVisibilityDistanceOverride = isVisibilityDistanceOverride;
 }
 
 void WorldObject::CleanupsBeforeDelete(bool /*finalCleanup*/)
@@ -1516,7 +1523,14 @@ float WorldObject::GetVisibilityRange() const
     if (isActiveObject() && !ToPlayer())
         return MAX_VISIBILITY_DISTANCE;
     else if (GetTypeId() == TYPEID_GAMEOBJECT)
-        return IsInWintergrasp() ? VISIBILITY_DIST_WINTERGRASP+VISIBILITY_INC_FOR_GOBJECTS : GetMap()->GetVisibilityRange()+VISIBILITY_INC_FOR_GOBJECTS;
+    {
+        if (IsInWintergrasp())
+            return VISIBILITY_DIST_WINTERGRASP+VISIBILITY_INC_FOR_GOBJECTS;
+        else if (IsVisibilityOverridden())
+            return MAX_VISIBILITY_DISTANCE;
+        else
+            return GetMap()->GetVisibilityRange()+VISIBILITY_INC_FOR_GOBJECTS;
+    }
     else
         return IsInWintergrasp() ? VISIBILITY_DIST_WINTERGRASP : GetMap()->GetVisibilityRange();
 }
@@ -1532,7 +1546,14 @@ float WorldObject::GetSightRange(const WorldObject* target) const
                 if (target->isActiveObject() && !target->ToPlayer())
                     return MAX_VISIBILITY_DISTANCE;
                 else if (target->GetTypeId() == TYPEID_GAMEOBJECT)
-                    return IsInWintergrasp() && target->IsInWintergrasp() ? VISIBILITY_DIST_WINTERGRASP+VISIBILITY_INC_FOR_GOBJECTS : GetMap()->GetVisibilityRange()+VISIBILITY_INC_FOR_GOBJECTS;
+                {
+                    if (IsInWintergrasp() && target->IsInWintergrasp())
+                        return VISIBILITY_DIST_WINTERGRASP+VISIBILITY_INC_FOR_GOBJECTS;
+                    else if (target->IsVisibilityOverridden())
+                        return MAX_VISIBILITY_DISTANCE;
+                    else
+                        return GetMap()->GetVisibilityRange()+VISIBILITY_INC_FOR_GOBJECTS;
+                }
 
                 return IsInWintergrasp() && target->IsInWintergrasp() ? VISIBILITY_DIST_WINTERGRASP : GetMap()->GetVisibilityRange();
             }
@@ -1820,6 +1841,16 @@ void WorldObject::SendPlaySound(uint32 Sound, bool OnlySelf)
 { 
     WorldPacket data(SMSG_PLAY_SOUND, 4);
     data << Sound;
+    if (OnlySelf && GetTypeId() == TYPEID_PLAYER)
+        this->ToPlayer()->GetSession()->SendPacket(&data);
+    else
+        SendMessageToSet(&data, true); // ToSelf ignored in this case
+}
+
+void WorldObject::SendPlayMusic(uint32 Music, bool OnlySelf)
+{
+    WorldPacket data(SMSG_PLAY_MUSIC, 4);
+    data << Music;
     if (OnlySelf && GetTypeId() == TYPEID_PLAYER)
         this->ToPlayer()->GetSession()->SendPacket(&data);
     else
@@ -2886,13 +2917,13 @@ void WorldObject::AddToNotify(uint16 f)
             {
                 uint32 EVENT_VISIBILITY_DELAY = u->FindMap() ? DynamicVisibilityMgr::GetVisibilityNotifyDelay(u->FindMap()->GetEntry()->map_type) : 1000;
 
-                uint32 diff = getMSTimeDiff(u->m_last_notify_mstime, GameTime::GetGameTimeMS());
+                uint32 diff = getMSTimeDiff(u->m_last_notify_mstime, World::GetGameTimeMS());
                 if (diff >= EVENT_VISIBILITY_DELAY/2)
                     EVENT_VISIBILITY_DELAY /= 2;
                 else
                     EVENT_VISIBILITY_DELAY -= diff;
                 u->m_delayed_unit_relocation_timer = EVENT_VISIBILITY_DELAY;
-                u->m_last_notify_mstime = GameTime::GetGameTimeMS()+EVENT_VISIBILITY_DELAY-1;
+                u->m_last_notify_mstime = World::GetGameTimeMS()+EVENT_VISIBILITY_DELAY-1;
             }
             else if (f & NOTIFY_AI_RELOCATION)
             {

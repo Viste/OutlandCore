@@ -118,8 +118,8 @@ struct SpellModifier
     Aura* const ownerAura;
 };
 
-typedef UNORDERED_MAP<uint32, PlayerTalent*> PlayerTalentMap;
-typedef UNORDERED_MAP<uint32, PlayerSpell*> PlayerSpellMap;
+typedef std::unordered_map<uint32, PlayerTalent*> PlayerTalentMap;
+typedef std::unordered_map<uint32, PlayerSpell*> PlayerSpellMap;
 typedef std::list<SpellModifier*> SpellModList;
 
 typedef std::list<uint64> WhisperListContainer;
@@ -134,7 +134,7 @@ struct SpellCooldown
 };
 
 typedef std::map<uint32, SpellCooldown> SpellCooldowns;
-typedef UNORDERED_MAP<uint32 /*instanceId*/, time_t/*releaseTime*/> InstanceTimeMap;
+typedef std::unordered_map<uint32 /*instanceId*/, time_t/*releaseTime*/> InstanceTimeMap;
 
 enum TrainerSpellState
 {
@@ -517,7 +517,7 @@ enum AtLoginFlags
 };
 
 typedef std::map<uint32, QuestStatusData> QuestStatusMap;
-typedef UNORDERED_SET<uint32> RewardedQuestSet;
+typedef std::unordered_set<uint32> RewardedQuestSet;
 
 //               quest,  keep
 typedef std::map<uint32, bool> QuestStatusSaveMap;
@@ -556,7 +556,7 @@ struct SkillStatusData
     SkillUpdateState uState;
 };
 
-typedef UNORDERED_MAP<uint32, SkillStatusData> SkillStatusMap;
+typedef std::unordered_map<uint32, SkillStatusData> SkillStatusMap;
 
 class Quest;
 class Spell;
@@ -899,6 +899,16 @@ enum AdditionalSaving
     ADDITIONAL_SAVING_QUEST_STATUS              = 0x02,
 };
 
+enum PlayerCommandStates
+{
+    CHEAT_NONE = 0x00,
+    CHEAT_GOD = 0x01,
+    CHEAT_CASTTIME = 0x02,
+    CHEAT_COOLDOWN = 0x04,
+    CHEAT_POWER = 0x08,
+    CHEAT_WATERWALK = 0x10
+};
+
 class PlayerTaxi
 {
     public:
@@ -1104,8 +1114,16 @@ class Player : public Unit, public GridObject<Player>
         }
         bool TeleportToEntryPoint();
 
-        void SetSummonPoint(uint32 mapid, float x, float y, float z, uint32 delay = 0, bool asSpectator = false);
-        bool IsSummonAsSpectator() const;
+        void SetSummonPoint(uint32 mapid, float x, float y, float z, uint32 delay = 0, bool asSpectator = false)
+        {
+            m_summon_expire = time(NULL) + (delay ? delay : MAX_PLAYER_SUMMON_DELAY);
+            m_summon_mapid = mapid;
+            m_summon_x = x;
+            m_summon_y = y;
+            m_summon_z = z;
+            m_summon_asSpectator = asSpectator;
+        }
+        bool IsSummonAsSpectator() const { return m_summon_asSpectator && m_summon_expire >= time(NULL); }
         void SetSummonAsSpectator(bool on) { m_summon_asSpectator = on; }
         void SummonIfPossible(bool agree, uint32 summoner_guid);
         time_t GetSummonExpireTimer() const { return m_summon_expire; }
@@ -1168,6 +1186,11 @@ class Player : public Unit, public GridObject<Player>
         void GiveLevel(uint8 level);
 
         void InitStatsForLevel(bool reapplyMods = false);
+
+        // .cheat command related
+        bool GetCommandStatus(uint32 command) const { return _activeCheats & command; }
+        void SetCommandStatusOn(uint32 command) { _activeCheats |= command; }
+        void SetCommandStatusOff(uint32 command) { _activeCheats &= ~command; }
 
         // Played Time Stuff
         time_t m_logintime;
@@ -1325,7 +1348,7 @@ class Player : public Unit, public GridObject<Player>
             Item* mainItem = GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
             return mainItem && mainItem->GetTemplate()->InventoryType == INVTYPE_2HWEAPON && !CanTitanGrip();
         }
-        void SendNewItem(Item* item, uint32 count, bool received, bool created, bool broadcast = false);
+        void SendNewItem(Item* item, uint32 count, bool received, bool created, bool broadcast = false, bool sendChatMessage = true);
         bool BuyItemFromVendorSlot(uint64 vendorguid, uint32 vendorslot, uint32 item, uint8 count, uint8 bag, uint8 slot);
         bool _StoreOrEquipNewItem(uint32 vendorslot, uint32 item, uint8 count, uint8 bag, uint8 slot, int32 price, ItemTemplate const* pProto, Creature* pVendor, VendorItem const* crItem, bool bStore);
 
@@ -1614,7 +1637,7 @@ class Player : public Unit, public GridObject<Player>
         uint8 unReadMails;
         time_t m_nextMailDelivereTime;
 
-        typedef UNORDERED_MAP<uint32, Item*> ItemMap;
+        typedef std::unordered_map<uint32, Item*> ItemMap;
 
         ItemMap mMitems;                                    //template defined in objectmgr.cpp
 
@@ -1730,9 +1753,21 @@ class Player : public Unit, public GridObject<Player>
 
         static uint32 const infinityCooldownDelay = 0x9A7EC800;  // used for set "infinity cooldowns" for spells and check, MONTH*IN_MILLISECONDS
         static uint32 const infinityCooldownDelayCheck = 0x4D3F6400; //MONTH*IN_MILLISECONDS/2;
-        virtual bool HasSpellCooldown(uint32 spell_id) const;
-        virtual bool HasSpellItemCooldown(uint32 spell_id, uint32 itemid) const;
-        uint32 GetSpellCooldownDelay(uint32 spell_id) const;
+        virtual bool HasSpellCooldown(uint32 spell_id) const
+        {
+            SpellCooldowns::const_iterator itr = m_spellCooldowns.find(spell_id);
+            return itr != m_spellCooldowns.end() && itr->second.end > World::GetGameTimeMS();
+        }
+        virtual bool HasSpellItemCooldown(uint32 spell_id, uint32 itemid) const
+        {
+            SpellCooldowns::const_iterator itr = m_spellCooldowns.find(spell_id);
+            return itr != m_spellCooldowns.end() && itr->second.end > World::GetGameTimeMS() && itr->second.itemid == itemid;
+        }
+        uint32 GetSpellCooldownDelay(uint32 spell_id) const
+        {
+            SpellCooldowns::const_iterator itr = m_spellCooldowns.find(spell_id);
+            return uint32(itr != m_spellCooldowns.end() && itr->second.end > World::GetGameTimeMS() ? itr->second.end - World::GetGameTimeMS() : 0);
+        }
         void AddSpellAndCategoryCooldowns(SpellInfo const* spellInfo, uint32 itemId, Spell* spell = NULL, bool infinityCooldown = false);
         virtual void AddSpellCooldown(uint32 spell_id, uint32 itemid, uint32 end_time, bool needSendToClient = false, bool forceSendToSpectator = false);
         void ModifySpellCooldown(uint32 spellId, int32 cooldown);
@@ -2182,6 +2217,8 @@ class Player : public Unit, public GridObject<Player>
         uint32 GetCurrentBattlegroundQueueSlot() const { return m_bgData.bgQueueSlot; }
         bool IsInvitedForBattlegroundInstance() const { return m_bgData.isInvited; }
         bool IsCurrentBattlegroundRandom() const { return m_bgData.bgIsRandom; }
+        BGData& GetBGData() { return m_bgData; }
+        void SetBGData(BGData& bgdata) { m_bgData = bgdata; }
         Battleground* GetBattleground(bool create = false) const;
 
         bool InBattlegroundQueue() const
@@ -2329,7 +2366,7 @@ class Player : public Unit, public GridObject<Player>
         void SetEntryPoint();
 
         // currently visible objects at player client
-        typedef UNORDERED_SET<uint64> ClientGUIDs;
+        typedef std::unordered_set<uint64> ClientGUIDs;
         ClientGUIDs m_clientGUIDs;
         std::vector<Unit*> m_newVisible; // pussywizard
 
@@ -2596,6 +2633,7 @@ class Player : public Unit, public GridObject<Player>
 
         uint32 m_AreaID;
         uint32 m_regenTimerCount;
+        uint32 m_foodEmoteTimerCount;
         float m_powerFraction[MAX_POWERS];
         uint32 m_contestedPvPTimer;
 
@@ -2620,7 +2658,7 @@ class Player : public Unit, public GridObject<Player>
         //We allow only one timed quest active at the same time. Below can then be simple value instead of set.
         typedef std::set<uint32> QuestSet;
         typedef std::set<uint32> SeasonalQuestSet;
-        typedef UNORDERED_MAP<uint32,SeasonalQuestSet> SeasonalEventQuestMap;
+        typedef std::unordered_map<uint32,SeasonalQuestSet> SeasonalEventQuestMap;
         QuestSet m_timedquests;
         QuestSet m_weeklyquests;
         QuestSet m_monthlyquests;
@@ -2917,6 +2955,8 @@ class Player : public Unit, public GridObject<Player>
         InstanceTimeMap _instanceResetTimes;
         uint32 _pendingBindId;
         uint32 _pendingBindTimer;
+
+        uint32 _activeCheats;
 
         // duel health and mana reset attributes
         uint32 healthBeforeDuel;

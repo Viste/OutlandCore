@@ -10,7 +10,6 @@
 #include "Spell.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
-#include "GameTime.h"
 #include "Cell.h"
 #include "CellImpl.h"
 #include "ObjectMgr.h"
@@ -204,6 +203,45 @@ void ScriptedAI::DoPlaySoundToSet(WorldObject* source, uint32 soundId)
     }
 
     source->PlayDirectSound(soundId);
+}
+
+void ScriptedAI::DoPlayMusic(uint32 soundId, bool zone)
+{
+    ObjectList* targets = NULL;
+
+    if (me && me->FindMap())
+    {
+        Map::PlayerList const &players = me->GetMap()->GetPlayers();
+        targets = new ObjectList();
+
+        if (!players.isEmpty())
+        {
+            for (Map::PlayerList::const_iterator i = players.begin(); i != players.end(); ++i)
+                if (Player* player = i->GetSource())
+                {
+                    if (player->GetZoneId() == me->GetZoneId())
+                    {
+                        if (!zone)
+                        {
+                            if (player->GetAreaId() == me->GetAreaId())
+                                targets->push_back(player);
+                        }
+                        else
+                            targets->push_back(player);
+                    }
+                }
+        }
+    }
+
+    if (targets)
+    {
+        for (ObjectList::const_iterator itr = targets->begin(); itr != targets->end(); ++itr)
+        {
+            (*itr)->SendPlayMusic(soundId, true);
+        }
+
+        delete targets;
+    }
 }
 
 Creature* ScriptedAI::DoSpawnCreature(uint32 entry, float offsetX, float offsetY, float offsetZ, float angle, uint32 type, uint32 despawntime)
@@ -418,9 +456,9 @@ bool ScriptedAI::EnterEvadeIfOutOfCombatArea()
     if (me->IsInEvadeMode() || !me->IsInCombat())
         return false;
 
-    if (_evadeCheckCooldown == GameTime::GetGameTime())
+    if (_evadeCheckCooldown == time(NULL))
         return false;
-    _evadeCheckCooldown = GameTime::GetGameTime();
+    _evadeCheckCooldown = time(NULL);
 
     if (!CheckEvadeIfOutOfCombatArea())
         return false;

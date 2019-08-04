@@ -524,6 +524,22 @@ struct GameObjectTemplate
         }
     }
 
+    bool IsLargeGameObject() const
+    {
+        switch (type)
+        {
+            case GAMEOBJECT_TYPE_BUTTON:            return button.large != 0;
+            case GAMEOBJECT_TYPE_QUESTGIVER:        return questgiver.large != 0;
+            case GAMEOBJECT_TYPE_GENERIC:           return _generic.large != 0;
+            case GAMEOBJECT_TYPE_TRAP:              return trap.large != 0;
+            case GAMEOBJECT_TYPE_SPELL_FOCUS:       return spellFocus.large != 0;
+            case GAMEOBJECT_TYPE_GOOBER:            return goober.large != 0;
+            case GAMEOBJECT_TYPE_SPELLCASTER:       return spellcaster.large != 0;
+            case GAMEOBJECT_TYPE_CAPTURE_POINT:     return capturePoint.large != 0;
+            default: return false;
+        }
+    }
+
     bool IsGameObjectForQuests() const
     {
         return IsForQuests;
@@ -541,8 +557,8 @@ struct GameObjectTemplateAddon
 };
 
 // Benchmarked: Faster than std::map (insert/find)
-typedef UNORDERED_MAP<uint32, GameObjectTemplate> GameObjectTemplateContainer;
-typedef UNORDERED_MAP<uint32, GameObjectTemplateAddon> GameObjectTemplateAddonContainer;
+typedef std::unordered_map<uint32, GameObjectTemplate> GameObjectTemplateContainer;
+typedef std::unordered_map<uint32, GameObjectTemplateAddon> GameObjectTemplateAddonContainer;
 
 class OPvPCapturePoint;
 struct TransportAnimation;
@@ -586,7 +602,7 @@ struct GameObjectAddon
     uint32 InvisibilityValue;
 };
 
-typedef UNORDERED_MAP<uint32, GameObjectAddon> GameObjectAddonContainer;
+typedef std::unordered_map<uint32, GameObjectAddon> GameObjectAddonContainer;
 
 // client side GO show states
 enum GOState
@@ -700,9 +716,20 @@ class GameObject : public WorldObject, public GridObject<GameObject>, public Mov
         uint32 GetSpellId() const { return m_spellId;}
 
         time_t GetRespawnTime() const { return m_respawnTime; }
-        time_t GetRespawnTimeEx() const;
-        
-        void SetRespawnTime(int32 respawn);
+        time_t GetRespawnTimeEx() const
+        {
+            time_t now = time(NULL);
+            if (m_respawnTime > now)
+                return m_respawnTime;
+            else
+                return now;
+        }
+
+        void SetRespawnTime(int32 respawn)
+        {
+            m_respawnTime = respawn > 0 ? time(NULL) + respawn : 0;
+            m_respawnDelayTime = respawn > 0 ? respawn : 0;
+        }
         void Respawn();
         bool isSpawned() const
         {
@@ -771,7 +798,7 @@ class GameObject : public WorldObject, public GridObject<GameObject>, public Mov
         bool HasLootRecipient() const { return m_lootRecipient || m_lootRecipientGroup; }
         uint32 m_groupLootTimer;                            // (msecs)timer used for group loot
         uint32 lootingGroupLowGUID;                         // used to find group which is looting
-        void SetLootGenerationTime();
+        void SetLootGenerationTime() { m_lootGenerationTime = time(NULL); }
         uint32 GetLootGenerationTime() const { return m_lootGenerationTime; }
 
         bool hasQuest(uint32 quest_id) const;

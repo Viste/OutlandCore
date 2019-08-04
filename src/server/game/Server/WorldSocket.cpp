@@ -25,7 +25,6 @@
 #include "ByteBuffer.h"
 #include "Opcodes.h"
 #include "DatabaseEnv.h"
-#include "GameTime.h"
 #include "BigNumber.h"
 #include "SHA1.h"
 #include "WorldSession.h"
@@ -120,8 +119,11 @@ bool WorldSocket::IsClosed(void) const
     return closing_;
 }
 
-void WorldSocket::CloseSocket(void)
+void WorldSocket::CloseSocket(std::string const& reason)
 {
+    if (!reason.empty())
+        sLog->outDebug(LOG_FILTER_CLOSE_SOCKET, "Socket closed because of: %s", reason.c_str());
+
     {
         ACE_GUARD (LockType, Guard, m_OutBufferLock);
 
@@ -660,7 +662,7 @@ int WorldSocket::ProcessIncoming(WorldPacket* new_pct)
     // manage memory ;)
     ACE_Auto_Ptr<WorldPacket> aptr (new_pct);
 
-    const ACE_UINT16 opcode = new_pct->GetOpcode();
+    const uint16 opcode = new_pct->GetOpcode();
 
     if (closing_)
         return -1;
@@ -840,7 +842,7 @@ int WorldSocket::HandleAuthSession(WorldPacket& recvPacket)
     //! Negative mutetime indicates amount of seconds to be muted effective on next login - which is now.
     if (mutetime < 0)
     {
-        mutetime = GameTime::GetGameTime() + llabs(mutetime);
+        mutetime = time(NULL) + llabs(mutetime);
 
         PreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_MUTE_TIME_LOGIN);
 

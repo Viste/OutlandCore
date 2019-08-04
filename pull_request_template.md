@@ -1,6 +1,6 @@
 <!-- First of all, THANK YOU for your contribution.
  Please fill this template unless your PR is very simple/straightforward.
- Do not forget to have a look at our Pull Request tutorial: https://github.com/azerothcore/azerothcore-wotlk/wiki/Contribute#how-to-create-a-pull-request
+ Do not forget to have a look at our Pull Request tutorial: http://www.azerothcore.org/wiki/Contribute#how-to-create-a-pull-request
 -->
 
 
@@ -50,3 +50,14 @@ Master
 
 <!-- NOTE2: If you intend to contribute more than once, you should really join us on our discord channel!
  The link is on our site http://azerothcore.org/ We set cosmetic ranks for our contributors and may give access to special resources/knowledge to them! -->
+ 
+ 
+ <!-- Do not remove the instructions below about testing, they will help users to test your PR -->
+ 
+ ## How to test AzerothCore PRs
+ 
+When a PR is ready to be tested, it will be marked as **[WAITING TO BE TESTED]**.
+
+You can help by testing PRs and writing your feedback here in the PR's page on GitHub. Follow the instructions here:
+
+http://www.azerothcore.org/wiki/How-to-test-a-PR

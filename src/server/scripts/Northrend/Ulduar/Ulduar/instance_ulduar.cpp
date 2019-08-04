@@ -7,7 +7,6 @@
 #include "ulduar.h"
 #include "Vehicle.h"
 #include "Player.h"
-#include "GameTime.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include "Transport.h"
@@ -59,6 +58,9 @@ public:
 
         // XT-002
         uint64 m_xt002DoorsGUID;
+
+        // Kologarn
+        uint64 KologarnDoorGUID;
 
         // Assembly of Iron
         uint64 m_assemblyDoorsGUID;
@@ -133,6 +135,7 @@ public:
             // XT-002
             m_xt002DoorsGUID        = 0;
 
+            // Kologarn Door
             // Assembly of Iron
             m_assemblyDoorsGUID     = 0;
             m_archivumDoorsGUID     = 0;
@@ -440,6 +443,9 @@ public:
                 // XT-002, Kologarn, Assembly of Iron
                 case GO_XT002_DOORS:
                     m_xt002DoorsGUID = gameObject->GetGUID();
+                    break;
+                case GO_KOLOGARN_DOORS:
+                    KologarnDoorGUID = gameObject->GetGUID();
                     break;
                 case GO_KOLOGARN_BRIDGE:
                     OpenIfDone(TYPE_KOLOGARN, gameObject, GO_STATE_READY);
@@ -782,7 +788,9 @@ public:
                 // XT-002
                 case GO_XT002_DOORS:
                     return m_xt002DoorsGUID;
-
+                // XT-002
+                case GO_KOLOGARN_DOORS:
+                    return KologarnDoorGUID;
                 // Thorim
                 case DATA_THORIM_LEVER_GATE:
                 case DATA_THORIM_LEVER:
@@ -888,10 +896,10 @@ public:
             }
             else if (unit->GetTypeId() == TYPEID_UNIT && unit->GetAreaId() == 4656 /*Conservatory of Life*/)
             {
-                if (GameTime::GetGameTime() > (m_conspeedatoryAttempt + DAY))
+                if (time(NULL) > (m_conspeedatoryAttempt + DAY))
                 {
                     DoStartTimedAchievement(ACHIEVEMENT_TIMED_TYPE_EVENT, 21597 /*CON-SPEED-ATORY_TIMED_CRITERIA*/);
-                    m_conspeedatoryAttempt = GameTime::GetGameTime();
+                    m_conspeedatoryAttempt = time(NULL);
                     SaveToDB();
                 }
             }

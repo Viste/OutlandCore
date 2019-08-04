@@ -3374,6 +3374,9 @@ void SpellMgr::LoadDbcDataCorrections()
         case 29809: // Desecration Arm - 36 instead of 37 - typo? :/
             spellInfo->EffectRadiusIndex[0] = 37;
             break;
+        case 42767: // Sic'em
+            spellInfo->EffectImplicitTargetA[0] = TARGET_UNIT_NEARBY_ENTRY;
+            break;
         // Master Shapeshifter: missing stance data for forms other than bear - bear version has correct data
         // To prevent aura staying on target after talent unlearned
         case 48420:
@@ -4311,11 +4314,25 @@ void SpellMgr::LoadDbcDataCorrections()
             spellInfo->DurationIndex = 367; // 2 Hours
             break;
         // Wintergrasp spells
-        case 51422: // Cannon (Tower Cannon)
-            spellInfo->EffectRadiusIndex[EFFECT_0] = 13; // 10yd
-            break;
+        case 57607: // WintergraspCatapult - Spell Plague Barrel - EffectRadiusIndex
+        case 57619: // WintergraspDemolisher - Spell Hourl Boulder - EffectRadiusIndex
         case 57610: // Cannon (Siege Turret)
-            spellInfo->EffectRadiusIndex[EFFECT_0] = 13; // 10yd
+            spellInfo->EffectRadiusIndex[1] = EFFECT_RADIUS_25_YARDS; // SPELL_EFFECT_WMO_DAMAGE
+        case 51422: // WintergraspCannon - Spell Fire Cannon - EffectRadiusIndex
+            spellInfo->EffectRadiusIndex[0] = EFFECT_RADIUS_10_YARDS; // SPELL_EFFECT_SCHOOL_DAMAGE
+            break;
+        case 54107: // WintergraspDemolisher - Spell Ram -  EffectRadiusIndex
+            spellInfo->EffectRadiusIndex[0] = EFFECT_RADIUS_3_YARDS; // SPELL_EFFECT_KNOCK_BACK
+            spellInfo->EffectRadiusIndex[1] = EFFECT_RADIUS_3_YARDS; // SPELL_EFFECT_SCHOOL_DAMAGE
+            spellInfo->EffectRadiusIndex[2] = EFFECT_RADIUS_3_YARDS; // SPELL_EFFECT_WEAPON_DAMAGE
+            break;
+        case 51678: // WintergraspSiegeEngine - Spell Ram - EffectRadiusIndex
+            spellInfo->EffectRadiusIndex[0] = EFFECT_RADIUS_10_YARDS; // SPELL_EFFECT_KNOCK_BACK
+            spellInfo->EffectRadiusIndex[1] = EFFECT_RADIUS_10_YARDS; // SPELL_EFFECT_SCHOOL_DAMAGE
+            spellInfo->EffectRadiusIndex[2] = EFFECT_RADIUS_20_YARDS; // SPELL_EFFECT_WEAPON_DAMAGE
+            break;
+        case 57606: // WintergraspCatapult - Spell Plague Barrell - Range
+            spellInfo->rangeIndex = 164; // "Catapult Range"
             break;
         case 50999: // Boulder (Demolisher)
             spellInfo->EffectRadiusIndex[EFFECT_0] = 13; // 10yd
@@ -4481,7 +4498,17 @@ void SpellMgr::LoadDbcDataCorrections()
             spellInfo->AuraInterruptFlags |= AURA_INTERRUPT_FLAG_CHANGE_MAP;
             break;
 
-
+        /*
+            Raid: Battle for Mount Hyjal
+            Boss: Archimonde
+        */
+        case 31984: // Spell doesn't need to ignore invulnerabilities
+        case 35354:
+            spellInfo->Attributes = SPELL_ATTR0_ABILITY;
+            break;
+        case 32111: // We only need the animation, no damage
+            spellInfo->CastingTimeIndex = 0;
+            break;
 
         //////////////////////////////////////////
         ////////// Vault of Archavon (VOA)
@@ -4589,6 +4616,10 @@ void SpellMgr::LoadDbcDataCorrections()
         // Ingvar the Plunderer, Ingvar transform
         case 42796:
             spellInfo->AttributesEx3 |= SPELL_ATTR3_DEATH_PERSISTENT;
+            break;
+        case 42772: // Hurl Dagger (Normal)
+        case 59685: // Hurl Dagger (Heroic)
+            spellInfo->Attributes |= SPELL_ATTR0_REQ_AMMO;
             break;
 
         //////////////////////////////////////////
@@ -5846,6 +5877,17 @@ void SpellMgr::LoadDbcDataCorrections()
         case 74637:
             spellInfo->speed = 0;
             break;
+        //Blazing Aura
+        case 75885:
+        case 75886:
+            spellInfo->AttributesEx4 &= ~SPELL_ATTR4_IGNORE_RESISTANCES;
+            break;
+        //Meteor Strike
+        case 75952:
+        //Combustion Periodic
+        case 74629:
+            spellInfo->AttributesEx4 &= ~SPELL_ATTR4_IGNORE_RESISTANCES;
+            break;
 
 
         // ///////////////////////////////////////////
@@ -6039,6 +6081,13 @@ void SpellMgr::LoadDbcDataCorrections()
         //Crushing the Crown
         case 71024:
             spellInfo->EffectImplicitTargetA[0] = TARGET_DEST_DYNOBJ_NONE;
+            break;
+        // Battle for the Undercity
+        case 59892: // Cyclone fall
+            spellInfo->Effect[EFFECT_0] = SPELL_EFFECT_APPLY_AREA_AURA_FRIEND;
+            spellInfo->EffectRadiusIndex[0] = EFFECT_RADIUS_10_YARDS;
+            spellInfo->AttributesEx &= ~SPELL_ATTR0_CANT_CANCEL;
+            spellInfo->AttributesEx3 |= SPELL_ATTR3_ONLY_TARGET_PLAYERS;
             break;
 
         // ///////////////////////////////////////////
@@ -6277,7 +6326,11 @@ void SpellMgr::LoadDbcDataCorrections()
     properties->Type = SUMMON_TYPE_TOTEM;
     properties = const_cast<SummonPropertiesEntry*>(sSummonPropertiesStore.LookupEntry(647)); // 52893
     properties->Type = SUMMON_TYPE_TOTEM;
-
+    if ((properties = const_cast<SummonPropertiesEntry*>(sSummonPropertiesStore.LookupEntry(628)))) // Hungry Plaguehound
+    {
+        properties->Category = SUMMON_CATEGORY_PET;
+        properties->Type = SUMMON_TYPE_PET;
+    }
 
     // Correct Pet Size
     CreatureDisplayInfoEntry* displayEntry = const_cast<CreatureDisplayInfoEntry*>(sCreatureDisplayInfoStore.LookupEntry(17028)); // Kurken

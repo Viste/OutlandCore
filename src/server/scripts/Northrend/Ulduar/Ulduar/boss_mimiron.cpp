@@ -5,7 +5,6 @@
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "SpellScript.h"
-#include "GameTime.h"
 #include "ulduar.h"
 #include "Vehicle.h"
 #include "Spell.h"
@@ -453,7 +452,7 @@ public:
                 case EVENT_SPAWN_FLAMES_INITIAL:
                     {
                         if (changeAllowedFlameSpreadTime)
-                            allowedFlameSpreadTime = GameTime::GetGameTime();
+                            allowedFlameSpreadTime = time(NULL);
 
                         std::vector<Player*> pg;
                         Map::PlayerList const &pl = me->GetMap()->GetPlayers();
@@ -776,7 +775,7 @@ public:
                         Creature* LMK2 = GetLMK2();
                         Creature* VX001 = GetVX001();
                         Creature* ACU = GetACU();
-                        
+
                         if (!VX001 || !LMK2 || !ACU)
                             return;
 
@@ -1114,7 +1113,7 @@ public:
                             cannon->ExitVehicle();
                         me->GetMotionMaster()->MoveCharge(2795.076f, 2598.616f, 364.32f, 21.0f);
                         if (Creature* c = GetMimiron())
-                            c->AI()->SetData(0, 1); 
+                            c->AI()->SetData(0, 1);
                     }
                 }
                 else if (Phase == 4)
@@ -1753,7 +1752,7 @@ public:
                         me->UpdatePosition(2744.65f, 2569.46f, 381.34f, M_PI, false);
 
                         if (Creature* c = GetMimiron())
-                            c->AI()->SetData(0, 3); 
+                            c->AI()->SetData(0, 3);
                     }
                 }
                 else if (Phase == 4)
@@ -2165,7 +2164,7 @@ public:
                     me->CastSpell(me, SPELL_BEAM_BLUE, true);
                     option = 3;
                     break;
-            }           
+            }
         }
 
         void UpdateAI(uint32 diff)
@@ -2237,7 +2236,7 @@ public:
 
         bool Load()
         {
-            lastMSTime = GameTime::GetGameTimeMS();
+            lastMSTime = World::GetGameTimeMS();
             lastOrientation = -1.0f;
             return true;
         }
@@ -2248,14 +2247,14 @@ public:
             {
                 if (c->GetTypeId() != TYPEID_UNIT)
                     return;
-                uint32 diff = getMSTimeDiff(lastMSTime, GameTime::GetGameTimeMS());
+                uint32 diff = getMSTimeDiff(lastMSTime, World::GetGameTimeMS());
                 if (lastOrientation == -1.0f)
                 {
                     lastOrientation = (c->ToCreature()->AI()->GetData(0)*2*M_PI)/100.0f;
                     diff = 0;
                 }
                 float new_o = Position::NormalizeOrientation(lastOrientation-(M_PI/60)*(diff/250.0f));
-                lastMSTime = GameTime::GetGameTimeMS();
+                lastMSTime = World::GetGameTimeMS();
                 lastOrientation = new_o;
                 c->SetOrientation(new_o);
                 c->SetFacingTo(new_o);
@@ -2277,25 +2276,24 @@ public:
 };
 
 class go_ulduar_do_not_push_this_button : public GameObjectScript
-{ 
-public: 
-    go_ulduar_do_not_push_this_button() : GameObjectScript("go_ulduar_do_not_push_this_button") { } 
+{
+public:
+    go_ulduar_do_not_push_this_button() : GameObjectScript("go_ulduar_do_not_push_this_button") { }
 
-    bool OnGossipHello(Player* Player, GameObject* GO)
+    bool OnGossipHello(Player* player, GameObject* go) override
     {
-        if( !Player || !GO )
+        if(!player || !go)
             return true;
 
-        InstanceScript* pInstance = GO->GetInstanceScript();
-        if (pInstance)
+        if (InstanceScript* instance = go->GetInstanceScript())
         {
-            if( pInstance->GetData(TYPE_MIMIRON) != NOT_STARTED )
+            if(instance->GetData(TYPE_MIMIRON) != NOT_STARTED)
                 return false;
 
-            if (Creature* c = ObjectAccessor::GetCreature(*GO, pInstance->GetData64(TYPE_MIMIRON)))
+            if (Creature* c = ObjectAccessor::GetCreature(*go, instance->GetData64(TYPE_MIMIRON)))
             {
                 c->AI()->SetData(0, 7);
-                c->AI()->AttackStart(Player);
+                c->AI()->AttackStart(player);
             }
         }
 
@@ -2317,7 +2315,7 @@ public:
     {
         npc_ulduar_flames_initialAI(Creature *pCreature) : NullCreatureAI(pCreature)
         {
-            CreateTime = GameTime::GetGameTime();
+            CreateTime = time(NULL);
             events.Reset();
             events.ScheduleEvent(EVENT_FLAMES_SPREAD, 5750);
             if( Creature* flame = me->SummonCreature(NPC_FLAMES_SPREAD, me->GetPositionX(), me->GetPositionY(), 364.32f, 0.0f) )

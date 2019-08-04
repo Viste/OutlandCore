@@ -4,6 +4,11 @@
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  */
 
+#ifdef ELUNA
+#include "LuaEngine.h"
+#include "ElunaUtility.h"
+#endif
+
 #include "Common.h"
 #include "DatabaseEnv.h"
 #include "WorldPacket.h"
@@ -23,7 +28,6 @@
 #include "Spell.h"
 #include "DynamicObject.h"
 #include "Group.h"
-#include "GameTime.h"
 #include "UpdateData.h"
 #include "MapManager.h"
 #include "ObjectAccessor.h"
@@ -1023,6 +1027,11 @@ void Spell::SelectImplicitChannelTargets(SpellEffIndex effIndex, SpellImplicitTa
                 CallScriptObjectTargetSelectHandlers(target, effIndex, targetType);
                 if (target)
                     m_targets.SetDst(*target);
+            }
+            else if (Spell* channeledSpell = m_originalCaster->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+            {
+                if (channeledSpell->m_targets.GetUnitTarget())
+                    m_targets.SetDst(*channeledSpell->m_targets.GetUnitTarget());
             }
             else //if (!m_targets.HasDst())
             {
@@ -2577,7 +2586,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
 
     // Xinef: absorb delayed projectiles for 500ms
     if (getState() == SPELL_STATE_DELAYED && !m_spellInfo->IsTargetingArea() && !m_spellInfo->IsPositive() && 
-        (GameTime::GetGameTimeMS() - target->timeDelay) <= effectUnit->m_lastSanctuaryTime && GameTime::GetGameTimeMS() < (effectUnit->m_lastSanctuaryTime + 500) &&
+        (World::GetGameTimeMS() - target->timeDelay) <= effectUnit->m_lastSanctuaryTime && World::GetGameTimeMS() < (effectUnit->m_lastSanctuaryTime + 500) &&
         effectUnit->FindMap() && !effectUnit->FindMap()->IsDungeon()
         )
         return;                                             // No missinfo in that case
@@ -2838,14 +2847,20 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
         }
     }
 
-    if (missInfo != SPELL_MISS_EVADE && !m_caster->IsFriendlyTo(effectUnit) && !m_spellInfo->HasAura(SPELL_AURA_BIND_SIGHT) && (!m_spellInfo->IsPositive() || m_spellInfo->HasEffect(SPELL_EFFECT_DISPEL)))
+    if (m_caster)
     {
-        m_caster->CombatStart(effectUnit, !m_spellInfo->HasAttribute(SPELL_ATTR3_NO_INITIAL_AGGRO));
+        if (missInfo != SPELL_MISS_EVADE && !m_caster->IsFriendlyTo(effectUnit) && (!m_spellInfo->IsPositive() || m_spellInfo->HasEffect(SPELL_EFFECT_DISPEL)))
+        {
+        m_caster->CombatStart(effectUnit, !(m_spellInfo->AttributesEx3& SPELL_ATTR3_NO_INITIAL_AGGRO));
 
-        if (m_spellInfo->HasAttribute(SPELL_ATTR0_CU_AURA_CC))
+        if (m_spellInfo->AttributesCu & SPELL_ATTR0_CU_AURA_CC)
             if (!effectUnit->IsStandState())
                 effectUnit->SetStandState(UNIT_STAND_STATE_STAND);
+        }
     }
+
+    if (missInfo != SPELL_MISS_EVADE && effectUnit != m_caster && m_caster->IsFriendlyTo(effectUnit) && m_spellInfo->IsPositive() && effectUnit->IsInCombat())
+        m_caster->SetInCombatWith(effectUnit);
 
     if (spellHitTarget)
     {
@@ -3415,6 +3430,10 @@ void Spell::prepare(SpellCastTargets const* targets, AuraEffect const* triggered
     // calculate cast time (calculated after first CheckCast check to prevent charge counting for first CheckCast fail)
     m_casttime = (_triggeredCastFlags & TRIGGERED_CAST_DIRECTLY) ? 0 : m_spellInfo->CalcCastTime(m_caster, this);
 
+    if (m_caster->GetTypeId() == TYPEID_PLAYER)
+        if (m_caster->ToPlayer()->GetCommandStatus(CHEAT_CASTTIME))
+            m_casttime = 0;
+
     // don't allow channeled spells / spells with cast time to be casted while moving
     // (even if they are interrupted on moving, spells with almost immediate effect get to have their effect processed before movement interrupter kicks in)
     if ((m_spellInfo->IsChanneled() || m_casttime) && m_caster->GetTypeId() == TYPEID_PLAYER && m_caster->isMoving() && m_spellInfo->InterruptFlags & SPELL_INTERRUPT_FLAG_MOVEMENT && !IsTriggered())
@@ -3644,7 +3663,9 @@ void Spell::_cast(bool skipCheck)
     {
         // now that we've done the basic check, now run the scripts
         // should be done before the spell is actually executed
-        //sScriptMgr->OnPlayerSpellCast(playerCaster, this, skipCheck); // pussywizard: optimization
+#ifdef ELUNA
+        sEluna->OnSpellCast(playerCaster, this, skipCheck);
+#endif
 
         // As of 3.0.2 pets begin attacking their owner's target immediately
         // Let any pets know we've attacked something. Check DmgClass for harmful spells only
@@ -3832,6 +3853,10 @@ void Spell::_cast(bool skipCheck)
         if (m_caster->GetTypeId() == TYPEID_PLAYER || (m_caster->IsPet() && m_caster->IsControlledByPlayer()))
             if (GetDelayMoment() > 0 && !m_caster->IsFriendlyTo(target) && !m_spellInfo->HasAura(SPELL_AURA_BIND_SIGHT) && (!m_spellInfo->IsPositive() || m_spellInfo->HasEffect(SPELL_EFFECT_DISPEL)))
                 m_caster->CombatStartOnCast(target, !m_spellInfo->HasAttribute(SPELL_ATTR3_NO_INITIAL_AGGRO), GetDelayMoment() + 500); // xinef: increase this time so we dont leave and enter combat in a moment
+
+    if (m_caster->GetTypeId() == TYPEID_PLAYER)
+        if (m_caster->ToPlayer()->GetCommandStatus(CHEAT_COOLDOWN))
+            m_caster->ToPlayer()->RemoveSpellCooldown(m_spellInfo->Id, true);
 
     SetExecutedCurrently(false);
 }
@@ -4518,7 +4543,7 @@ void Spell::SendSpellGo()
     data << uint8(m_cast_count);                            // pending spell cast?
     data << uint32(m_spellInfo->Id);                        // spellId
     data << uint32(castFlags);                              // cast flags
-    data << uint32(GameTime::GetGameTimeMS());                 // timestamp
+    data << uint32(World::GetGameTimeMS());                 // timestamp
 
     WriteSpellGoTargets(&data);
 
@@ -4952,6 +4977,11 @@ void Spell::TakePower()
     if (m_CastItem || m_triggeredByAuraSpell)
         return;
 
+    //Don't take power if the spell is cast while .cheat power is enabled.
+    if (m_caster->GetTypeId() == TYPEID_PLAYER)
+        if (m_caster->ToPlayer()->GetCommandStatus(CHEAT_POWER))
+            return;
+
     Powers powerType = Powers(m_spellInfo->PowerType);
     bool hit = true;
     if (m_caster->GetTypeId() == TYPEID_PLAYER)
@@ -5001,7 +5031,7 @@ void Spell::TakePower()
 
     // Set the five second timer
     if (powerType == POWER_MANA && m_powerCost > 0)
-        m_caster->SetLastManaUse(GameTime::GetGameTimeMS());
+        m_caster->SetLastManaUse(World::GetGameTimeMS());
 }
 
 void Spell::TakeAmmo()
@@ -6023,7 +6053,7 @@ SpellCastResult Spell::CheckCast(bool strict)
                     return SPELL_FAILED_BAD_TARGETS;
 
                 // Xinef: Implement summon pending error
-                if (target->GetSummonExpireTimer() > GameTime::GetGameTime())
+                if (target->GetSummonExpireTimer() > time(NULL))
                     return SPELL_FAILED_SUMMON_PENDING;
 
                 // check if our map is dungeon
@@ -6063,7 +6093,7 @@ SpellCastResult Spell::CheckCast(bool strict)
                     return SPELL_FAILED_BAD_TARGETS;
 
                 // Xinef: Implement summon pending error
-                if (target->GetSummonExpireTimer() > GameTime::GetGameTime())
+                if (target->GetSummonExpireTimer() > time(NULL))
                     return SPELL_FAILED_SUMMON_PENDING;
 
                 break;
@@ -8300,6 +8330,10 @@ void Spell::TriggerGlobalCooldown()
         else
             return;
     }
+
+    if (m_caster->GetTypeId() == TYPEID_PLAYER)
+        if (m_caster->ToPlayer()->GetCommandStatus(CHEAT_COOLDOWN))
+            return;
 
     // Global cooldown can't leave range 1..1.5 secs
     // There are some spells (mostly not casted directly by player) that have < 1 sec and > 1.5 sec global cooldowns

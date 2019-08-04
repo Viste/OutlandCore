@@ -23,7 +23,6 @@
 #include "Vehicle.h"
 #include "VMapFactory.h"
 #include "LFGMgr.h"
-#include "GameTime.h"
 #include "Chat.h"
 #ifdef ELUNA
 #include "LuaEngine.h"
@@ -784,7 +783,7 @@ void Map::HandleDelayedVisibility()
 { 
     if (i_objectsForDelayedVisibility.empty())
         return;
-    for (UNORDERED_SET<Unit*>::iterator itr = i_objectsForDelayedVisibility.begin(); itr != i_objectsForDelayedVisibility.end(); ++itr)
+    for (std::unordered_set<Unit*>::iterator itr = i_objectsForDelayedVisibility.begin(); itr != i_objectsForDelayedVisibility.end(); ++itr)
         (*itr)->ExecuteDelayedUnitRelocationEvent();
     i_objectsForDelayedVisibility.clear();
 }
@@ -2360,7 +2359,7 @@ void Map::RemoveAllObjectsInRemoveList()
     //sLog->outDebug(LOG_FILTER_MAPS, "Object remover 1 check.");
     while (!i_objectsToRemove.empty())
     {
-        UNORDERED_SET<WorldObject*>::iterator itr = i_objectsToRemove.begin();
+        std::unordered_set<WorldObject*>::iterator itr = i_objectsToRemove.begin();
         WorldObject* obj = *itr;
         i_objectsToRemove.erase(itr);
 
@@ -2649,7 +2648,7 @@ bool InstanceMap::AddPlayerToMap(Player* player)
         // increase current instances (hourly limit)
         // xinef: specific instances are still limited
         if (!group || !group->isLFGGroup() || !group->IsLfgRandomInstance())
-            player->AddInstanceEnterTime(GetInstanceId(), GameTime::GetGameTime());
+            player->AddInstanceEnterTime(GetInstanceId(), time(NULL));
 
         if (!playerBind->perm && !mapSave->CanReset() && (!group || !group->isLFGGroup() || !group->IsLfgRandomInstance()))
         {
@@ -2995,7 +2994,7 @@ void Map::SaveCreatureRespawnTime(uint32 dbGuid, time_t& respawnTime)
         return;
     }
 
-    time_t now = GameTime::GetGameTime();
+    time_t now = time(NULL);
     if (GetInstanceResetPeriod() > 0 && respawnTime-now+5 >= GetInstanceResetPeriod())
         respawnTime = now+YEAR;
 
@@ -3029,7 +3028,7 @@ void Map::SaveGORespawnTime(uint32 dbGuid, time_t& respawnTime)
         return;
     }
 
-    time_t now = GameTime::GetGameTime();
+    time_t now = time(NULL);
     if (GetInstanceResetPeriod() > 0 && respawnTime-now+5 >= GetInstanceResetPeriod())
         respawnTime = now+YEAR;
 
@@ -3250,6 +3249,21 @@ void Map::SendZoneDynamicInfo(Player* player)
         data << uint32(overrideLight);
         data << uint32(itr->second.LightFadeInTime);
         player->SendDirectMessage(&data);
+    }
+}
+
+void Map::PlayDirectSoundToMap(uint32 soundId, uint32 zoneId)
+{
+    Map::PlayerList const& players = GetPlayers();
+    if (!players.isEmpty())
+    {
+        WorldPacket data(SMSG_PLAY_SOUND, 4);
+        data << uint32(soundId);
+
+        for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+            if (Player* player = itr->GetSource())
+                if (!zoneId || player->GetZoneId() == zoneId)
+                    player->SendDirectMessage(&data);
     }
 }
 

@@ -14,8 +14,8 @@
 #include "DatabaseEnv.h"
 #include "Formulas.h"
 #include "GameEventMgr.h"
-#include "GameTime.h"
 #include "GossipDef.h"
+#include "ScriptedGossip.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
@@ -46,9 +46,6 @@
 #ifdef ELUNA
 #include "LuaEngine.h"
 #endif
-
-VendorItemCount::VendorItemCount(uint32 _item, uint32 _count)
-    : itemId(_item), count(_count), lastIncrementTime(GameTime::GetGameTime()) { }
 
 TrainerSpell const* TrainerSpellData::Find(uint32 spell_id) const
 {
@@ -272,7 +269,7 @@ void Creature::RemoveCorpse(bool setSpawnTime, bool skipVisibility)
     if (getDeathState() != CORPSE)
         return;
 
-    m_corpseRemoveTime = GameTime::GetGameTime();
+    m_corpseRemoveTime = time(NULL);
     setDeathState(DEAD);
     RemoveAllAuras();
     if (!skipVisibility) // pussywizard
@@ -285,7 +282,7 @@ void Creature::RemoveCorpse(bool setSpawnTime, bool skipVisibility)
     // Should get removed later, just keep "compatibility" with scripts
     if (setSpawnTime)
     {
-        m_respawnTime = GameTime::GetGameTime() + respawnDelay;
+        m_respawnTime = time(NULL) + respawnDelay;
         //SaveRespawnTime();
     }
 
@@ -510,7 +507,7 @@ void Creature::Update(uint32 diff)
             break;
         case DEAD:
         {
-            time_t now = GameTime::GetGameTime();
+            time_t now = time(NULL);
             if (m_respawnTime <= now)
             {
                 bool allowed = IsAIEnabled ? AI()->CanRespawn() : true;     // First check if there are any scripts that object to us respawning
@@ -552,7 +549,7 @@ void Creature::Update(uint32 diff)
                 }
                 else m_groupLootTimer -= diff;
             }
-            else if (m_corpseRemoveTime <= GameTime::GetGameTime())
+            else if (m_corpseRemoveTime <= time(NULL))
             {
                 RemoveCorpse(false);
 #if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
@@ -918,12 +915,12 @@ bool Creature::isCanInteractWithBattleMaster(Player* player, bool msg) const
 
     if (!player->GetBGAccessByLevel(bgTypeId))
     {
-        player->PlayerTalkClass->ClearMenus();
+        ClearGossipMenuFor(player);
         switch (bgTypeId)
         {
-            case BATTLEGROUND_AV:  player->PlayerTalkClass->SendGossipMenu(7616, GetGUID()); break;
-            case BATTLEGROUND_WS:  player->PlayerTalkClass->SendGossipMenu(7599, GetGUID()); break;
-            case BATTLEGROUND_AB:  player->PlayerTalkClass->SendGossipMenu(7642, GetGUID()); break;
+            case BATTLEGROUND_AV: SendGossipMenuFor(player, 7616, this); break;
+            case BATTLEGROUND_WS: SendGossipMenuFor(player, 7599, this); break;
+            case BATTLEGROUND_AB: SendGossipMenuFor(player, 7642, this); break;
             case BATTLEGROUND_EY:
             case BATTLEGROUND_NA:
             case BATTLEGROUND_BE:
@@ -931,7 +928,7 @@ bool Creature::isCanInteractWithBattleMaster(Player* player, bool msg) const
             case BATTLEGROUND_RL:
             case BATTLEGROUND_SA:
             case BATTLEGROUND_DS:
-            case BATTLEGROUND_RV: player->PlayerTalkClass->SendGossipMenu(10024, GetGUID()); break;
+            case BATTLEGROUND_RV: SendGossipMenuFor(player, 10024, this); break;
             default: break;
         }
         return false;
@@ -1481,7 +1478,7 @@ bool Creature::IsInvisibleDueToDespawn() const
     if (Unit::IsInvisibleDueToDespawn())
         return true;
 
-    if (IsAlive() || m_corpseRemoveTime > GameTime::GetGameTime())
+    if (IsAlive() || m_corpseRemoveTime > time(NULL))
         return false;
 
     return true;
@@ -1546,8 +1543,8 @@ void Creature::setDeathState(DeathState s, bool despawn)
 
     if (s == JUST_DIED)
     {
-        m_corpseRemoveTime = GameTime::GetGameTime() + m_corpseDelay;
-        m_respawnTime = GameTime::GetGameTime() + m_respawnDelay + m_corpseDelay;
+        m_corpseRemoveTime = time(NULL) + m_corpseDelay;
+        m_respawnTime = time(NULL) + m_respawnDelay + m_corpseDelay;
 
         // always save boss respawn time at death to prevent crash cheating
         if (GetMap()->IsDungeon() || isWorldBoss() || GetCreatureTemplate()->rank >= CREATURE_ELITE_ELITE)
@@ -2130,7 +2127,7 @@ bool Creature::CanCreatureAttack(Unit const* victim, bool skipDistCheck) const
 
         // pussywizard: don't check distance to home position if recently damaged (allow kiting away from spawnpoint!)
         // xinef: this should include taunt auras
-        if (!isWorldBoss() && (GetLastDamagedTime() > GameTime::GetGameTime() || HasAuraType(SPELL_AURA_MOD_TAUNT)))
+        if (!isWorldBoss() && (GetLastDamagedTime() > sWorld->GetGameTime() || HasAuraType(SPELL_AURA_MOD_TAUNT)))
             return true;
     }
 
@@ -2298,7 +2295,7 @@ void Creature::ProhibitSpellSchool(SpellSchoolMask idSchoolMask, uint32 unTimeMs
 {
     for (uint8 i = SPELL_SCHOOL_NORMAL; i < MAX_SPELL_SCHOOL; ++i)
         if (idSchoolMask & (1 << i))
-            m_ProhibitSchoolTime[i] = GameTime::GetGameTimeMS() + unTimeMs;
+            m_ProhibitSchoolTime[i] = World::GetGameTimeMS() + unTimeMs;
 }
 
 bool Creature::IsSpellProhibited(SpellSchoolMask idSchoolMask) const
@@ -2309,7 +2306,7 @@ bool Creature::IsSpellProhibited(SpellSchoolMask idSchoolMask) const
 
     for (uint8 i = SPELL_SCHOOL_NORMAL; i < MAX_SPELL_SCHOOL; ++i)
         if (idSchoolMask & (1 << i))
-            if (m_ProhibitSchoolTime[i] >= GameTime::GetGameTimeMS())
+            if (m_ProhibitSchoolTime[i] >= World::GetGameTimeMS())
                 return true;
 
     return false;
@@ -2317,7 +2314,7 @@ bool Creature::IsSpellProhibited(SpellSchoolMask idSchoolMask) const
 
 void Creature::_AddCreatureSpellCooldown(uint32 spell_id, uint32 end_time)
 { 
-    m_CreatureSpellCooldowns[spell_id] = GameTime::GetGameTimeMS()+end_time;
+    m_CreatureSpellCooldowns[spell_id] = World::GetGameTimeMS()+end_time;
 }
 
 void Creature::AddSpellCooldown(uint32 spell_id, uint32 /*itemid*/, uint32 end_time, bool /*needSendToClient*/, bool /*forceSendToSpectator*/)
@@ -2364,13 +2361,13 @@ uint32 Creature::GetSpellCooldown(uint32 spell_id) const
     if (itr == m_CreatureSpellCooldowns.end())
         return 0;
     
-    return itr->second > GameTime::GetGameTimeMS() ? itr->second - GameTime::GetGameTimeMS() : 0;
+    return itr->second > World::GetGameTimeMS() ? itr->second - World::GetGameTimeMS() : 0;
 }
 
 bool Creature::HasSpellCooldown(uint32 spell_id) const
 { 
     CreatureSpellCooldowns::const_iterator itr = m_CreatureSpellCooldowns.find(spell_id);
-    return (itr != m_CreatureSpellCooldowns.end() && itr->second > GameTime::GetGameTimeMS());
+    return (itr != m_CreatureSpellCooldowns.end() && itr->second > World::GetGameTimeMS());
 }
 
 bool Creature::HasSpell(uint32 spellID) const
@@ -2384,16 +2381,11 @@ bool Creature::HasSpell(uint32 spellID) const
 
 time_t Creature::GetRespawnTimeEx() const
 { 
-    time_t now = GameTime::GetGameTime();
+    time_t now = time(NULL);
     if (m_respawnTime > now)
         return m_respawnTime;
     else
         return now;
-}
-
-void Creature::SetRespawnTime(uint32 respawn)
-{
-    m_respawnTime = respawn ? GameTime::GetGameTime() + respawn : 0;
 }
 
 void Creature::GetRespawnPosition(float &x, float &y, float &z, float* ori, float* dist) const
@@ -2440,7 +2432,7 @@ void Creature::AllLootRemovedFromCorpse()
 { 
     if (!HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SKINNABLE))
     {
-        time_t now = GameTime::GetGameTime();
+        time_t now = time(NULL);
         if (m_corpseRemoveTime <= now)
             return;
 
@@ -2454,7 +2446,7 @@ void Creature::AllLootRemovedFromCorpse()
 
         // corpse skinnable, but without skinning flag, and then skinned, corpse will despawn next update
         if (cinfo && cinfo->SkinLootId)
-            m_corpseRemoveTime = GameTime::GetGameTime();
+            m_corpseRemoveTime = time(NULL);
         else
             m_corpseRemoveTime -= diff;
     }
@@ -2508,7 +2500,7 @@ uint32 Creature::GetVendorItemCurrentCount(VendorItem const* vItem)
 
     VendorItemCount* vCount = &*itr;
 
-    time_t ptime = GameTime::GetGameTime();
+    time_t ptime = time(NULL);
 
     if (time_t(vCount->lastIncrementTime + vItem->incrtime) <= ptime)
     {
@@ -2547,7 +2539,7 @@ uint32 Creature::UpdateVendorItemCurrentCount(VendorItem const* vItem, uint32 us
 
     VendorItemCount* vCount = &*itr;
 
-    time_t ptime = GameTime::GetGameTime();
+    time_t ptime = time(NULL);
 
     if (time_t(vCount->lastIncrementTime + vItem->incrtime) <= ptime)
     {
@@ -2865,14 +2857,4 @@ float Creature::GetAttackDistance(Unit const* player) const
         retDistance = 5.0f;
 
     return (retDistance*aggroRate);
-}
-
-void Creature::SetPickPocketLootTime()
-{
-    lootPickPocketRestoreTime = GameTime::GetGameTime() + MINUTE + GetCorpseDelay() + GetRespawnTime();
-}
-
-bool Creature::CanGeneratePickPocketLoot() const
-{
-    return (lootPickPocketRestoreTime == 0 || lootPickPocketRestoreTime < GameTime::GetGameTime());
 }

@@ -12,7 +12,6 @@
 #include "MapManager.h"
 #include "MapRefManager.h"
 #include "ObjectMgr.h"
-#include "GameTime.h"
 #include "Pet.h"
 #include "ScriptedCreature.h"
 #include "ScriptMgr.h"
@@ -44,7 +43,7 @@ void Map::ScriptsStart(ScriptMapMap const& scripts, uint32 id, Object* source, O
         sa.ownerGUID  = ownerGUID;
 
         sa.script = &iter->second;
-        m_scriptSchedule.insert(ScriptScheduleMap::value_type(time_t(GameTime::GetGameTime() + iter->first), sa));
+        m_scriptSchedule.insert(ScriptScheduleMap::value_type(time_t(sWorld->GetGameTime() + iter->first), sa));
         if (iter->first == 0)
             immedScript = true;
 
@@ -74,7 +73,7 @@ void Map::ScriptCommandStart(ScriptInfo const& script, uint32 delay, Object* sou
     sa.ownerGUID  = ownerGUID;
 
     sa.script = &script;
-    m_scriptSchedule.insert(ScriptScheduleMap::value_type(time_t(GameTime::GetGameTime() + delay), sa));
+    m_scriptSchedule.insert(ScriptScheduleMap::value_type(time_t(sWorld->GetGameTime() + delay), sa));
 
     sScriptMgr->IncreaseScheduledScriptsCount();
 
@@ -281,7 +280,7 @@ void Map::ScriptsProcess()
     ///- Process overdue queued scripts
     ScriptScheduleMap::iterator iter = m_scriptSchedule.begin();
     // ok as multimap is a *sorted* associative container
-    while (!m_scriptSchedule.empty() && (iter->first <= GameTime::GetGameTime()))
+    while (!m_scriptSchedule.empty() && (iter->first <= sWorld->GetGameTime()))
     {
         ScriptAction const& step = iter->second;
 
@@ -915,6 +914,28 @@ void Map::ScriptsProcess()
                 // Source must be Player.
                 if (Player* player = _GetScriptPlayer(source, true, step.script))
                     player->SendMovieStart(step.script->PlayMovie.MovieID);
+                break;
+
+            case SCRIPT_COMMAND_MOVEMENT:
+                // Source must be Creature.
+                if (Creature* cSource = _GetScriptCreature(source, true, step.script))
+                {
+                    if (!cSource->IsAlive())
+                        return;
+
+                    cSource->GetMotionMaster()->MovementExpired();
+                    cSource->GetMotionMaster()->MoveIdle();
+
+                    switch (step.script->Movement.MovementType)
+                    {
+                        case RANDOM_MOTION_TYPE:
+                            cSource->GetMotionMaster()->MoveRandom((float)step.script->Movement.MovementDistance);
+                            break;
+                        case WAYPOINT_MOTION_TYPE:
+                            cSource->GetMotionMaster()->MovePath(step.script->Movement.Path, false);
+                            break;
+                    }
+                }
                 break;
 
             default:

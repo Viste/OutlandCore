@@ -130,7 +130,8 @@ struct CalendarInvite
             _text = calendarInvite.GetText();
         }
 
-        CalendarInvite();
+        CalendarInvite() : _inviteId(1), _eventId(0), _invitee(0), _senderGUID(0), _statusTime(time(NULL)),
+            _status(CALENDAR_STATUS_INVITED), _rank(CALENDAR_RANK_PLAYER), _text("") { }
 
         CalendarInvite(uint64 inviteId, uint64 eventId, uint64 invitee, uint64 senderGUID, time_t statusTime,
             CalendarInviteStatus status, CalendarModerationRank rank, std::string text) :
@@ -251,8 +252,8 @@ struct CalendarEvent
         std::string _description;
 };
 typedef std::vector<CalendarInvite*> CalendarInviteStore;
-typedef UNORDERED_SET<CalendarEvent*> CalendarEventStore;
-typedef UNORDERED_MAP<uint64 /* eventId */, CalendarInviteStore > CalendarEventInviteStore;
+typedef std::unordered_set<CalendarEvent*> CalendarEventStore;
+typedef std::unordered_map<uint64 /* eventId */, CalendarInviteStore > CalendarEventInviteStore;
 
 class CalendarMgr
 {

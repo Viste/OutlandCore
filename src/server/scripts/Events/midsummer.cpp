@@ -1,7 +1,6 @@
 // Scripted by Xinef
 
 #include "ScriptMgr.h"
-#include "GameTime.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
 #include "Spell.h"
@@ -22,9 +21,9 @@ class go_midsummer_bonfire : public GameObjectScript
 public:
     go_midsummer_bonfire() : GameObjectScript("go_midsummer_bonfire") { }
 
-    bool OnGossipSelect(Player* player, GameObject*  /*go*/, uint32 /*sender*/, uint32  /*action*/)
+    bool OnGossipSelect(Player* player, GameObject*  /*go*/, uint32 /*sender*/, uint32  /*action*/) override
     {
-        player->CLOSE_GOSSIP_MENU();
+        CloseGossipMenuFor(player);
         // we know that there is only one gossip.
         player->CastSpell(player, SPELL_STAMP_OUT_BONFIRE, true);
         return true;
@@ -38,7 +37,7 @@ class npc_midsummer_bonfire : public CreatureScript
 
         struct npc_midsummer_bonfireAI : public ScriptedAI
         {
-            npc_midsummer_bonfireAI(Creature* c) : ScriptedAI(c) 
+            npc_midsummer_bonfireAI(Creature* c) : ScriptedAI(c)
             {
                 me->IsAIEnabled = true;
                 goGUID = 0;
@@ -48,7 +47,7 @@ class npc_midsummer_bonfire : public CreatureScript
                     me->RemoveGameObject(go, false);
                 }
             }
-            
+
             uint64 goGUID;
 
             void SpellHit(Unit*, SpellInfo const* spellInfo)
@@ -87,7 +86,7 @@ class npc_midsummer_torch_target : public CreatureScript
 
         struct npc_midsummer_torch_targetAI : public ScriptedAI
         {
-            npc_midsummer_torch_targetAI(Creature* c) : ScriptedAI(c) 
+            npc_midsummer_torch_targetAI(Creature* c) : ScriptedAI(c)
             {
                 teleTimer = 0;
                 startTimer = 1;
@@ -115,7 +114,7 @@ class npc_midsummer_torch_target : public CreatureScript
             {
                 return seer->GetGUID() == playerGUID;
             }
-            
+
             void SpellHit(Unit* caster, SpellInfo const* spellInfo)
             {
                 if (posVec.empty())
@@ -185,7 +184,7 @@ class npc_midsummer_torch_target : public CreatureScript
                 Position pos;
                 pos.Relocate(posVec.at(num));
                 me->m_last_notify_position.Relocate(0.0f, 0.0f, 0.0f);
-                me->m_last_notify_mstime = GameTime::GetGameTimeMS() + 10000;
+                me->m_last_notify_mstime = World::GetGameTimeMS() + 10000;
 
                 me->NearTeleportTo(pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), pos.GetOrientation());
             }
@@ -274,7 +273,7 @@ public:
     class spell_midsummer_ribbon_pole_AuraScript : public AuraScript
     {
         PrepareAuraScript(spell_midsummer_ribbon_pole_AuraScript)
-        
+
         void HandleEffectPeriodic(AuraEffect const *  /*aurEff*/)
         {
             PreventDefaultAction();
@@ -301,7 +300,7 @@ public:
                 }
 
                 // Achievement
-                if ((GameTime::GetGameTime() - GetApplyTime()) > 60 && target->GetTypeId() == TYPEID_PLAYER)
+                if ((time(NULL) - GetApplyTime()) > 60 && target->GetTypeId() == TYPEID_PLAYER)
                     target->ToPlayer()->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_BE_SPELL_TARGET, 58934, 0, target);
             }
         }
@@ -341,7 +340,7 @@ public:
         }
 
         uint64 torchGUID;
-        
+
         void HandleEffectApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
         {
             Unit* ar = GetTarget();

@@ -19,7 +19,6 @@ EndScriptData */
 #include "Chat.h"
 #include "Language.h"
 #include "Player.h"
-#include "GameTime.h"
 #include "Opcodes.h"
 #include "Transport.h"
 #include "GameObject.h"
@@ -138,7 +137,7 @@ public:
         Map* map = player->GetMap();
 
         GameObject* object = sObjectMgr->IsGameObjectStaticTransport(objectInfo->entry) ? new StaticTransport() : new GameObject();
-        uint32 guidLow = sObjectMgr->GenerateLowGuid(HIGHGUID_GAMEOBJECT);
+        uint32 guidLow = sObjectMgr->GenerateRecycledLowGuid(HIGHGUID_GAMEOBJECT);
 
         if (!object->Create(guidLow, objectInfo->entry, map, player->GetPhaseMaskForSpawn(), x, y, z, o, G3D::Quat(), 0, GO_STATE_READY))
         {
@@ -311,7 +310,7 @@ public:
 
         if (target)
         {
-            int32 curRespawnDelay = int32(target->GetRespawnTimeEx() - GameTime::GetGameTime());
+            int32 curRespawnDelay = int32(target->GetRespawnTimeEx() - time(nullptr));
             if (curRespawnDelay < 0)
                 curRespawnDelay = 0;
 
@@ -549,7 +548,7 @@ public:
         stmt->setFloat(5, player->GetPositionY());
         stmt->setFloat(6, player->GetPositionZ());
         stmt->setFloat(7, distance * distance);
-        stmt->setFloat(8, player->GetPhaseMask());
+        stmt->setUInt32(8, player->GetPhaseMask());
         PreparedQueryResult result = WorldDatabase.Query(stmt);
 
         if (result)
@@ -656,7 +655,7 @@ public:
 
         if (!object)
         {
-            
+
             handler->PSendSysMessage(LANG_COMMAND_OBJNOTFOUND, abs(guidLow));
             handler->SetSentErrorMessage(true);
             return false;
